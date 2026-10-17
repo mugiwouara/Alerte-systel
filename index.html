@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Détecteur Violet - Optimisé Batterie</title>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; text-align: center; overflow: hidden; }
+        #video { width: 100vw; height: 50vh; object-fit: cover; }
+        #controls { padding: 15px; background: #111; position: absolute; bottom: 0; width: 100%; box-sizing: border-box; }
+        button { background: #ff4757; color: white; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 8px; width: 100%; max-width: 300px; }
+        .status { margin-top: 10px; font-size: 14px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <div id="controls">
+        <button id="startBtn">ACTIVER L'ALARME</button>
+        <div class="status" id="statusText">Statut : En attente d'activation...</div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const statusText = document.getElementById('statusText');
+
+        let audioCtx = null;
+        let isRunning = false;
+
+        // Démarrage de la caméra arrière
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { statusText.innerText = "Erreur caméra : " + err; });
+
+        startBtn.addEventListener('click', () => {
+            // Initialisation audio obligatoire sur iPhone
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+
+            isRunning = true;
+            startBtn.style.backgroundColor = "#2ed573";
+            startBtn.innerText = "ALARME ACTIVE";
+            statusText.innerText = "Surveillance optimisée (1 image/sec)...";
+
+            // ANALYSE RALENTIE : 1 fois par seconde (Économise énormément la batterie)
+            setInterval(analyzeColor, 1000);
+        });
+
+        function playAlarm() {
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Son strident
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function analyzeColor() {
+            if (!isRunning) return;
+            
+            // Basse résolution pour soulager le processeur et la batterie
+            canvas.width = video.videoWidth / 4;   
+            canvas.height = video.videoHeight / 4;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            let frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let data = frame.data;
+            let violetCount = 0;
+
+            // Analyse ciblée sur le violet clair (ignore le bleu foncé et les autres couleurs)
+            for (let i = 0; i < data.length; i += 16) { 
+                let r = data[i];
+                let g = data[i+1];
+                let b = data[i+2];
+
+                // Critère strict pour votre violet clair
+                let isViolet = (r > 80 && b > 100 && g < 95 && b > r); 
+
+                if (isViolet) {
+                    violetCount++;
+                }
+            }
+
+            // Seuil d'alerte
+            if (violetCount > 15) {
+                statusText.innerText = "ALERTE : VIOLET DÉTECTÉ !";
+                statusText.style.color = "#ff4757";
+                playAlarm();
+            } else {
+                statusText.innerText = "Surveillance active... (Ras)";
+                statusText.style.color = "#2ed573";
+            }
+        }
+    </script>
+</body>
+</html>
