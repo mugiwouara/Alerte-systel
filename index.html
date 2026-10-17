@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Détecteur Violet - Précision HSL</title>
+    <title>Détecteur Violet - Optimisé</title>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; text-align: center; overflow: hidden; }
         #video { width: 100vw; height: 50vh; object-fit: cover; }
@@ -43,9 +43,9 @@
             isRunning = true;
             startBtn.style.backgroundColor = "#2ed573";
             startBtn.innerText = "ALARME ACTIVE";
-            statusText.innerText = "Surveillance HSL active (1 image/sec)...";
+            statusText.innerText = "Surveillance active (1 analyse/sec)...";
 
-            // Analyse ralentie et optimisée batterie (1 fois par seconde)
+            // OPTIMISATION BATTERIE : On analyse l'image seulement 1 fois par seconde (au lieu de 60)
             setInterval(analyzeColor, 1000);
         });
 
@@ -62,22 +62,10 @@
             osc.stop(audioCtx.currentTime + 0.5);
         }
 
-        // Fonction pour convertir RVB en Teinte (Hue) et isoler le vrai violet du bleu
-        function rgbToHue(r, g, b) {
-            r /= 255; g /= 255; b /= 255;
-            let max = Math.max(r, g, b), min = Math.min(r, g, b);
-            let h, d = max - min;
-            if (d === 0) return 0;
-            if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-            else if (max === g) h = (b - r) / d + 2;
-            else h = (r - g) / d + 4;
-            return h * 60; // Retourne l'angle de la couleur sur 360 degrés
-        }
-
         function analyzeColor() {
             if (!isRunning) return;
             
-            // Basse résolution pour préserver la batterie
+            // OPTIMISATION QUALITÉ/BATTERIE : On réduit la taille de l'image capturée par 4
             canvas.width = video.videoWidth / 4;   
             canvas.height = video.videoHeight / 4;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -86,24 +74,17 @@
             let data = frame.data;
             let violetCount = 0;
 
+            // Analyse fine de la couleur violette
             for (let i = 0; i < data.length; i += 16) { 
                 let r = data[i], g = data[i+1], b = data[i+2];
-                let hue = rgbToHue(r, g, b);
-                let max = Math.max(r, g, b);
-                let min = Math.min(r, g, b);
-                let saturation = max === 0 ? 0 : (max - min) / max;
-                let lightness = max / 255;
 
-                // Le bleu foncé a un Hue élevé (> 210°). 
-                // Le violet se situe strictement entre 265° et 325° avec assez de lumière et de saturation.
-                let isViolet = (hue >= 265 && hue <= 325 && saturation > 0.3 && lightness > 0.2); 
-
-                if (isViolet) {
+                // Formule standard d'un violet/pourpre d'écran (Rouge et Bleu forts, Vert bas)
+                if (r > 100 && b > 120 && g < 90 && b > r) {
                     violetCount++;
                 }
             }
 
-            if (violetCount > 15) {
+            if (violetCount > 20) {
                 statusText.innerText = "ALERTE : VIOLET DÉTECTÉ !";
                 statusText.style.color = "#ff4757";
                 playAlarm();
